@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>CVC Drag & Drop</title>
+
+  <style>
+    /* ==========  GLOBAL  ========== */
+    body{
+      font-family:'Lexend',sans-serif;margin:0;padding:0;text-align:center;
+      background:#f0f0f0;display:flex;flex-direction:column;min-height:100vh;
+    }
+    h1{
+      margin:0;font-size:2em;padding:20px 0;background:#3366FF;color:#fff;width:100%;
+      box-shadow:0 4px 6px rgba(0,0,0,.1);border-bottom:2px solid #999;
+    }
+    .container{
+      max-width:1200px;margin:0 auto;width:100%;padding:20px;box-sizing:border-box;
+      flex:1;display:flex;flex-direction:column;align-items:center;
+    }
+    .content-container{display:flex;flex-direction:column;align-items:center;gap:20px;width:100%}
+
+    /* ==========  DROP ZONES  ========== */
+    .drop-zone-container{
+      display:flex;
+      justify-content:center;      /* center horizontally */
+      align-items:center;           /* center vertically within the row */
+      gap:20px;                     /* space between slot group and result */
+      width:100%;
+    }
+    /* result ( = full word ) */
+    .result-display{
+      display:flex;align-items:center;gap:8px;font-size:2em;color:#333;
+    }
+    .equals-sign{font-weight:700}
+    #full-word{display:none}
+    .cvc-word-area{display:flex;gap:10px}
+    .drop-slot{
+      width:60px;height:60px;border:2px dashed #ccc;border-radius:8px;
+      background:#fff;font-size:2em;color:#333;
+      display:flex;justify-content:center;align-items:center;
+      box-shadow:0 2px 4px rgba(0,0,0,.1);transition:background .3s;
+    }
+    .drop-slot.highlight{border-color:#3366FF}
+    .glow{background:#007bff;color:#fff}
+
+    /* hide a slot when merged */
+    .drop-slot.hidden{display:none}
+
+    /* result slot: visual match to main slots */
+    .result-slot{
+      min-width:60px;
+      height:60px;
+      width:auto;               /* expands for longer words */
+      box-sizing:border-box;
+      font-size:1em;            /* matches user‑set size */
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      line-height:1;
+      padding:0 10px;           /* horizontal space like the 60‑px boxes give */
+    }
+
+    /* letter span inside each slot */
+    .slot-char{display:inline-block;cursor:pointer}
+
+    /* fade‑out only the letter span */
+    @keyframes fadeOutLetter{from{opacity:1}to{opacity:0}}
+
+    /* fade‑in / fade‑out for full word */
+    @keyframes fadeInWord{from{opacity:0}to{opacity:1}}
+    @keyframes fadeOutWord{from{opacity:1}to{opacity:0}}
+    .fade-in-word{animation:fadeInWord .3s forwards}
+    .fade-out-word{animation:fadeOutWord .3s forwards}
+
+    /* ==========  LETTER BANK  ========== */
+    .letters-container{
+      display:flex;flex-wrap:wrap;justify-content:center;
+      gap:10px;max-width:600px;margin:0 auto;
+    }
+    .letter{
+      width:40px;height:40px;border-radius:5px;background:#007bff;color:#fff;
+      display:flex;justify-content:center;align-items:center;cursor:grab;
+      font-size:1.2em;user-select:none;box-shadow:0 2px 4px rgba(0,0,0,.1);
+    }
+
+    /* ==========  BUTTONS  ========== */
+    /* Blend (green) */
+    .blend-button{
+      padding:10px 20px;background:#4CAF50;color:#fff;border:none;border-radius:5px;
+      font-size:16px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.2);
+      transition:background .2s,transform .1s;
+    }
+    .blend-button:hover{background:#45a049}
+    .blend-button:active{background:#3e8e41;transform:translateY(1px)}
+
+    /* Retry (distinct red pill) */
+    .retry-button{
+      padding:10px 28px;background:#E53935;color:#fff;border:none;border-radius:50px;
+      font-size:16px;font-weight:600;cursor:pointer;letter-spacing:.5px;
+      box-shadow:0 3px 6px rgba(0,0,0,.25);transition:background .2s,transform .1s;
+    }
+    .retry-button:hover{background:#d32f2f}
+    .retry-button:active{background:#b71c1c;transform:translateY(1px)}
+
+    /* ==========  MOBILE  ========== */
+    @media(max-width:600px){
+      h1{font-size:1.5em}
+      .cvc-word-area{flex-direction:column}
+      .drop-slot{width:50px;height:50px;font-size:1.5em}
+      .letters-container{gap:8px}
+      .letter{width:35px;height:35px;font-size:1em}
+      .blend-button,.retry-button{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <h1>CVC Drag & Drop</h1>
+
+  <div class="container">
+    <div class="content-container">
+
+      <!-- Drop slots + result -->
+      <div class="drop-zone-container">
+        <div class="cvc-word-area">
+          <div class="drop-slot" data-slot="0"></div>
+          <div class="drop-slot" data-slot="1"></div>
+          <div class="drop-slot" data-slot="2"></div>
+        </div>
+
+        <!-- Equals + blended result -->
+        <div class="result-display">
+          <span class="equals-sign">=</span>
+          <div id="result-slot" class="drop-slot result-slot"></div>
+          <span id="full-word" style="display:none;"></span>
+        </div>
+      </div>
+
+      <!-- Blend button (above letter bank) -->
+      <button class="blend-button" id="blend-button">Blend</button>
+
+      <!-- Letter bank -->
+      <div class="letters-container" id="letters-container"></div>
+
+      <!-- Retry button (now BELOW the letter bank) -->
+      <button class="retry-button" id="retry-button">Retry</button>
+
+    </div>
+  </div>
+
+  <script>
+    /***************  SETUP LETTER BANK  ***************/
+    const lettersContainer = document.getElementById('letters-container');
+    /* only the three main slots (exclude the result slot) */
+    const dropSlots = document.querySelectorAll('.cvc-word-area .drop-slot');
+    const fullWordEl = document.getElementById('full-word');
+    const resultSlot = document.getElementById('result-slot');
+
+    /* click the full word to replay its sound */
+    resultSlot.addEventListener('click', e => {
+      const span = e.target.closest('.slot-char');
+      if (!span) return;
+      resultSlot.classList.add('glow');
+      playSound(`sounds/${span.textContent}.m4a`, () => {
+        resultSlot.classList.remove('glow');
+      });
+    });
+
+    for (let code = 97; code <= 122; code++) {
+      const letter = String.fromCharCode(code);
+      const tile   = document.createElement('div');
+      tile.className = 'letter';
+      tile.textContent = letter;
+      tile.draggable = true;
+      tile.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', letter));
+      /* double‑click tile → send to first empty visible slot */
+      tile.addEventListener('dblclick', () => {
+        for (const s of dropSlots) {
+          if (s.classList.contains('hidden')) continue;      // skip hidden slot
+          if (!s.querySelector('.slot-char')) {              // found empty
+            insertLetterWithSound(s, letter);
+            break;
+          }
+        }
+      });
+      lettersContainer.appendChild(tile);
+    }
+
+    /***************  DRAG & DROP  ***************/
+    dropSlots.forEach(slot => {
+      slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('highlight'); });
+      slot.addEventListener('dragleave',    () => slot.classList.remove('highlight'));
+
+      slot.addEventListener('drop', e => {
+        e.preventDefault();
+        slot.classList.remove('highlight');
+        const l = e.dataTransfer.getData('text/plain');
+        insertLetter(slot, l);
+        // Wait for the individual letter sound to finish, then attempt merge
+        playSound(`sounds/${l}.m4a`, () => {
+          checkMerge();
+        });
+      });
+
+      /* single‑ vs double‑click logic */
+      let clickTimer = null;
+
+      slot.addEventListener('click', e => {
+        const span = e.target.closest('.slot-char');
+        if (!span) return;
+
+        /* wait briefly to see if a double‑click follows */
+        clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => {
+          /* no second click arrived → treat as single click with glow */
+          slot.classList.add('glow');
+          playSound(`sounds/${span.textContent}.m4a`, () => {
+            slot.classList.remove('glow');
+          });
+        }, 250); // 250 ms threshold for double‑click
+      });
+
+      slot.addEventListener('dblclick', () => {
+        clearTimeout(clickTimer);           // prevent single‑click sound
+        const span = slot.querySelector('.slot-char');
+        if (!span) return;                  // nothing to remove
+
+        slot.innerHTML = '';
+        slot.classList.remove('glow');
+
+        const third = dropSlots[2];
+        const second = dropSlots[1];
+
+        /* Case A: currently in 2‑box mode (slot 2 hidden) */
+        if (third.classList.contains('hidden')) {
+          /* always clear full word when any letter is removed in 2‑box mode */
+          clearFullWord();
+          if (slot === second) {
+            /* removing the merged part → restore third slot and re‑pack */
+            third.classList.remove('hidden');
+            normalizeSlots();
+          }
+          return;  // if first slot removed, keep 2‑box layout (third remains hidden)
+        }
+
+        /* Case B: normal 3‑slot layout */
+        normalizeSlots();
+        clearFullWord();   // fade out current full word on any removal
+      });
+    });
+
+    function insertLetter(slot, l) {
+      slot.innerHTML = `<span class="slot-char">${l}</span>`;
+    }
+
+    /* insert letter, play its sound, then check for merging */
+    function insertLetterWithSound(slot, l){
+      insertLetter(slot, l);
+      playSound(`sounds/${l}.m4a`, () => checkMerge());
+    }
+
+    /* check if slots 1 & 2 are filled, then merge into a single “word‑family” box */
+    function checkMerge() {
+      const slot1 = dropSlots[1];   // second box (index 1)
+      const slot2 = dropSlots[2];   // third box (index 2)
+      const span1 = slot1.querySelector('.slot-char');
+      const span2 = slot2.querySelector('.slot-char');
+      if (span1 && span2) {
+        const merged = span1.textContent + span2.textContent; // e.g. "an"
+        clearFullWord();   // keep full–word box empty until Blend is pressed
+        slot1.innerHTML = `<span class="slot-char">${merged}</span>`;
+        slot2.innerHTML = '';
+        slot2.classList.add('hidden'); // hide third box
+        // Automatically play blended sound and glow while playing
+        slot1.classList.add('glow');
+        playSound(`sounds/${merged}.m4a`, () => {
+          slot1.classList.remove('glow');
+        });
+      }
+    }
+
+    /* full‑word helpers */
+    function showFullWord(word){
+      resultSlot.classList.remove('fade-out-word');
+      resultSlot.innerHTML = `<span class="slot-char">${word}</span>`;
+      resultSlot.classList.add('fade-in-word');
+      resultSlot.addEventListener('animationend',function h(e){
+        if(e.animationName==='fadeInWord'){resultSlot.classList.remove('fade-in-word');}
+        resultSlot.removeEventListener('animationend',h);
+      });
+    }
+    function clearFullWord(){
+      if(!resultSlot.innerHTML) return;      // nothing to clear
+      resultSlot.classList.remove('fade-in-word');
+      resultSlot.classList.add('fade-out-word');
+      resultSlot.addEventListener('animationend',function h(e){
+        if(e.animationName==='fadeOutWord'){
+          resultSlot.classList.remove('fade-out-word');
+          resultSlot.innerHTML='';
+        }
+        resultSlot.removeEventListener('animationend',h);
+      });
+    }
+
+    /***************  BLEND BUTTON  ***************/
+    document.getElementById('blend-button').addEventListener('click', () => {
+      const wordSlots = document.querySelectorAll('.cvc-word-area .drop-slot');
+      const filled = [...wordSlots]
+        .map((s, i) => ({ span: s.querySelector('.slot-char'), i }))
+        .filter(o => o.span);
+
+      if (filled.length === 0) {
+        alert('Place at least 1 letter.');
+        return;
+      }
+
+      clearFullWord();   /* reset previous result with fade */
+
+      /* Only 1 letter */
+      if (filled.length === 1) {
+        const word = filled[0].span.textContent;
+        playLettersSequentially(filled, () => {
+          resultSlot.classList.add('glow');
+          playSound(`sounds/${word}.m4a`, () => resultSlot.classList.remove('glow'));
+        });
+        showFullWord(word);
+        return;
+      }
+
+      /* 2+ letters */
+      const word = filled.map(o => o.span.textContent).join('');
+      showFullWord(word);
+      fullWordEl.textContent = word;
+      playLettersSequentially(filled, () => {
+        /* Only the result slot glows while blended word plays */
+        resultSlot.classList.add('glow');
+        playSound(`sounds/${word}.m4a`, () => {
+          resultSlot.classList.remove('glow');
+        });
+      });
+    });
+
+    /***************  PLAY HELPERS  ***************/
+    function playSound(src, onEnd = () => {}) {
+      const au = new Audio(src);
+      au.addEventListener('ended', onEnd);
+      au.addEventListener('error', onEnd);
+      au.play().catch(onEnd);
+    }
+
+    function playLettersSequentially(arr, done) {
+      let idx = 0;
+      function next() {
+        if (idx >= arr.length) { done(); return; }
+        const { span, i } = arr[idx];
+        const slot = dropSlots[i];
+        slot.classList.add('glow');
+        playSound(`sounds/${span.textContent}.m4a`, () => {
+          slot.classList.remove('glow');
+          idx++; next();
+        });
+      }
+      next();
+    }
+    // highlightAll and unhighlightAll are no longer used
+
+    /***************  RETRY BUTTON  ***************/
+    document.getElementById('retry-button').addEventListener('click', () => {
+      clearFullWord();
+      resultSlot.classList.remove('glow');
+      // always show all slots on retry
+      fullWordEl.textContent = '';
+      dropSlots[2].classList.remove('hidden');
+      dropSlots.forEach(slot => {
+        slot.innerHTML = '';
+        slot.classList.remove('glow');
+      });
+      normalizeSlots(); // ensure all slots reset correctly
+    });
+
+    /* shift any filled spans to the left, ensure third slot visible */
+    function normalizeSlots() {
+      /* If we are in 2‑box mode (slot 2 hidden), keep layout intact. */
+      if (dropSlots[2].classList.contains('hidden')) {
+        return;  // don't shift letters left
+      }
+
+      // collect current letters/spans in order
+      const letters = [];
+      dropSlots.forEach(s => {
+        const span = s.querySelector('.slot-char');
+        if (span) letters.push(span.textContent);
+      });
+
+      // reset slots to empty & visible
+      dropSlots.forEach(s => {
+        s.innerHTML = '';
+        s.classList.remove('hidden', 'glow');
+      });
+
+      // re‑insert letters from leftmost slot
+      letters.forEach((text, idx) => {
+        if (idx < dropSlots.length) {
+          dropSlots[idx].innerHTML = `<span class="slot-char">${text}</span>`;
+        }
+      });
+
+      // after re‑packing, re‑check possible merge (in case we still have 2 letters)
+      if (letters.length === 2) {
+        const [c1, c2] = letters;
+        insertLetter(dropSlots[1], c1); // put first letter in slot1
+        insertLetter(dropSlots[2], c2); // second letter in slot2
+        checkMerge();                  // will merge and hide slot2
+      }
+    }
+  </script>
+</body>
+</html>
